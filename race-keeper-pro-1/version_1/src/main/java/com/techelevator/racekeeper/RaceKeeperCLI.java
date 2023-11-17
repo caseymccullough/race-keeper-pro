@@ -10,12 +10,13 @@ import com.techelevator.racekeeper.dao.JdbcRaceDao;
 import com.techelevator.racekeeper.dao.JdbcRunnerDao;
 import com.techelevator.racekeeper.dao.RaceDao;
 import com.techelevator.racekeeper.dao.RunnerDao;
-import com.techelevator.racekeeper.exception.DaoException;
 import com.techelevator.racekeeper.model.*;
 import org.apache.commons.dbcp2.BasicDataSource;
 
 import com.techelevator.racekeeper.view.Menu;
 import org.springframework.cglib.core.Local;
+import util.BasicConsole;
+import util.SystemInOutConsole;
 
 import javax.sql.DataSource;
 
@@ -37,6 +38,8 @@ public class RaceKeeperCLI {
     private static final String RUNNERS_MENU_OPTION_RUNNER_BY_CITY = "Get Runners by city";
     private static final String RUNNERS_MENU_OPTION_CREATE_RUNNER = "Create Runner";
     private static final String RUNNERS_MENU_OPTION_UPDATE_RUNNER = "Update Runner information";
+
+    private static final String RUNNERS_MENU_OPTION_ADD_RACE_RESULT = "Add Runner's Race information";
     private static final String[] RUNNERS_MENU_OPTIONS = new String[]{RUNNERS_MENU_OPTION_ALL_RUNNERS,
             RUNNERS_MENU_OPTION_RUNNER_BY_ID,
             RUNNERS_MENU_OPTION_RUNNERS_BY_NAME_WILDCARD,
@@ -44,6 +47,7 @@ public class RaceKeeperCLI {
             RUNNERS_MENU_OPTION_RUNNER_BY_CITY,
             RUNNERS_MENU_OPTION_CREATE_RUNNER,
             RUNNERS_MENU_OPTION_UPDATE_RUNNER,
+            RUNNERS_MENU_OPTION_ADD_RACE_RESULT,
             MENU_OPTION_RETURN_TO_MAIN};
 
     private static final String RACE_MENU_OPTION_ALL_RACES = "Get all Races";
@@ -57,6 +61,8 @@ public class RaceKeeperCLI {
             MENU_OPTION_RETURN_TO_MAIN};
 
 
+
+    private final BasicConsole console;
     private final Menu menu;
     private final RunnerDao runnerDao;
     private final RaceDao raceDao;
@@ -74,6 +80,7 @@ public class RaceKeeperCLI {
 
     public RaceKeeperCLI(DataSource dataSource) {
         this.menu = new Menu(System.in, System.out);
+        this.console = new SystemInOutConsole();
 
         runnerDao = new JdbcRunnerDao(dataSource);
         raceDao = new JdbcRaceDao(dataSource);
@@ -117,6 +124,8 @@ public class RaceKeeperCLI {
                 handleAddRunner();
             } else if (choice.equals(RUNNERS_MENU_OPTION_UPDATE_RUNNER)) {
                 handleUpdateRunner();
+            } else if (choice.equals(RUNNERS_MENU_OPTION_ADD_RACE_RESULT)){
+                handleAddRaceResult();
             }
 
             else if (choice.equals(MENU_OPTION_RETURN_TO_MAIN)) {
@@ -181,7 +190,7 @@ public class RaceKeeperCLI {
 
 	private void handleUpdateRunner() {
 
-		// Get the list of customers so the user can choose one
+		// Get the list of runners so the user can choose one
 		List<Runner> runners = runnerDao.getRunners();
 
 		// Display the list of runners and ask for selection
@@ -190,7 +199,7 @@ public class RaceKeeperCLI {
 			// User cancelled
 			return;
 		}
-		// Prompt the user for customer information
+		// Prompt the user for runner information
 		runner = promptForRunnerInformation(runner);
 
 		// Call the DAO to update the customer
@@ -198,6 +207,29 @@ public class RaceKeeperCLI {
 		// Inform the user
         System.out.println("Customer has been updated.");
 	}
+
+    private void handleAddRaceResult () {
+        // Get the list of runners so the user can choose one
+        List<Runner> runners = runnerDao.getRunners();
+
+        // Display the list of runners and ask for selection
+        Runner runner = selectRunner(runners);
+        if (runner == null) {
+            // User cancelled
+            return;
+        }
+
+        int runnerId = runner.getId();
+
+        List<Race> races = raceDao.getRaces();
+
+        // Display the list of races and ask for a selection
+        Race race = selectRace(races);
+
+        System.out.println("Preparing to add record for race " + race.getId() + " and runner " + runnerId);
+
+        // FINISH THIS
+    }
 
 
     private void listRunners(List<Runner> runners) {
@@ -304,24 +336,18 @@ public class RaceKeeperCLI {
             newRunner.setStreet(promptForRunnerStreet(null));
             newRunner.setCity(promptForRunnerCity(null));
             newRunner.setState_code(promptForRunnerStateCode(null));
-
-            newRunner.setGender_code('M');
-
-            //newRunner.setGender_code(promptForRunnerGenderCode(null));
-
-            newRunner.setBirthday(LocalDate.parse("2000-11-10"));
-           // newRunner.setBirthday(promptForRunnerBirthday(null));
-        } else {
-            // This is an update -- make all prompts default to current values
-            // Set the id
-            newRunner.setId(existingRunner.getId());
-            newRunner.setFirst_name(promptForRunnerFirstName(null));
-            newRunner.setLast_name(promptForRunnerLastName(null));
-            newRunner.setStreet(promptForRunnerStreet(null));
-            newRunner.setCity(promptForRunnerCity(null));
-            newRunner.setState_code(promptForRunnerStateCode(null));
             newRunner.setGender_code(promptForRunnerGenderCode(null));
             newRunner.setBirthday(promptForRunnerBirthday(null));
+        } else {
+            // This is an update -- make all prompts default to current values
+            newRunner.setId(existingRunner.getId());
+            newRunner.setFirst_name(promptForRunnerFirstName(existingRunner.getFirst_name()));
+            newRunner.setLast_name(promptForRunnerLastName(existingRunner.getLast_name()));
+            newRunner.setStreet(promptForRunnerStreet(existingRunner.getStreet()));
+            newRunner.setCity(promptForRunnerCity(existingRunner.getCity()));
+            newRunner.setState_code(promptForRunnerStateCode(existingRunner.getState_code()));
+            newRunner.setGender_code(promptForRunnerGenderCode("" + existingRunner.getGender_code()));
+            newRunner.setBirthday(promptForRunnerBirthday((existingRunner.getBirthday().toString())));
         }
         return newRunner;
     }
@@ -343,14 +369,15 @@ public class RaceKeeperCLI {
     }
 
     private String promptForRunnerStateCode(String defaultValue) {
-        return promptForString("State (2-letter)", true, defaultValue);
+        String result =  promptForString("State (2-letter)", true, defaultValue);
+        return result.substring(0, 2);
     }
 
     private char promptForRunnerGenderCode(String defaultValue) {
         char genderCode;
         do {
            String entry = promptForString("Gender (M or F)", true, defaultValue);
-           genderCode = entry.charAt(0);
+           genderCode = entry.toUpperCase().charAt(0);
            if (genderCode != 'M' && genderCode != 'F') {
                System.out.println("Error: Value must be either M or F");
            }
@@ -361,12 +388,12 @@ public class RaceKeeperCLI {
 
     private LocalDate promptForRunnerBirthday (String defaultValue){
         LocalDate date = null;
-        DateTimeFormatter formater = DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(ResolverStyle.STRICT);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(ResolverStyle.STRICT);
 
         do {
             String entry = promptForString("Birthday (in format \"28/04/2023\"", true, defaultValue);
            try {
-               date = LocalDate.parse (entry, formater);
+               date = LocalDate.parse (entry, formatter);
            } catch (Exception e){
                System.err.println("Illegal date information");
            }
@@ -378,8 +405,7 @@ public class RaceKeeperCLI {
     private String promptForString(String prompt, boolean required, String defaultValue) {
         prompt = promptWithDefault(prompt, defaultValue);
         while (true) {
-            //String entry = console.promptForString(prompt);
-            String entry = prompt;
+            String entry = console.promptForString(prompt);
             if (!entry.isEmpty()) {
                 return entry;
             }
@@ -390,7 +416,7 @@ public class RaceKeeperCLI {
             if (!required) {
                 return entry;
             }
-            System.out.println("A value is required, please try again.");
+            console.printErrorMessage("A value is required, please try again.");
         }
     }
 
@@ -407,7 +433,7 @@ public class RaceKeeperCLI {
     public Runner selectRunner(List<Runner> runners) {
         while (true) {
             printRunnerList(runners);
-            System.out.println("Enter customer id [0 to cancel]: ");
+            System.out.println("Enter runner id [0 to cancel]: ");
             int runnerId = sc.nextInt();
             if (runnerId == 0) {
                 return null;
@@ -420,13 +446,34 @@ public class RaceKeeperCLI {
         }
     }
 
-    public void printRunnerList (List <Runner> runners){
-        for (Runner runner : runners){
-            System.out.println(runner.getId() + " " + runner.getLast_name() + ", " + runner.getLast_name());
+    public Race selectRace(List<Race> races) {
+        while (true) {
+            printRaceList(races);
+            System.out.println("Enter race id [0 to cancel]: ");
+            int raceId = sc.nextInt();
+            if (raceId == 0) {
+                return null;
+            }
+            Race selectedRace= raceDao.getRaceById(raceId);
+            if (selectedRace != null) {
+                return selectedRace;
+            }
+            System.err.println("That's not a valid id, please try again.");
         }
     }
 
 
+    public void printRunnerList (List <Runner> runners){
+        for (Runner runner : runners){
+            System.out.println(runner.getId() + " " + runner.getFirst_name() + ", " + runner.getLast_name());
+        }
+    }
 
+    public void printRaceList (List <Race> races){
+        for (Race race : races){
+            System.out.println(race.getId() + " " + race.getName() + " "  + race.getCity() + " " +
+                    race.getState_code() + " " +  race.getDistance());
+        }
+    }
 
 }
